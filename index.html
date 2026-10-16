@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工地進度掌控儀表板：研發計畫與安弟AI監控</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f8f7f4;
+            color: #3d3d3d;
+            overflow-x: hidden;
+        }
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            z-index: -1;
+            opacity: 0.15;
+            border-radius: 30%;
+            animation: bg-anim 80s ease-in-out infinite alternate;
+        }
+        body::before {
+            width: 90vw; height: 90vw;
+            background: linear-gradient(135deg, #c8e6c9, #a5d6a7);
+            top: -25vh; left: -35vw;
+        }
+        body::after {
+            width: 80vw; height: 80vw;
+            background: linear-gradient(135deg, #a5d6a7, #81c784);
+            bottom: -35vh; right: -30vw;
+            animation-delay: -40s;
+        }
+        @keyframes bg-anim {
+            0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+            100% { transform: translate(80px, 150px) rotate(50deg) scale(1.1); }
+        }
+        .nav-link { transition: all 0.2s; border-bottom: 2px solid transparent; }
+        .nav-link:hover { color: #16a34a; border-bottom-color: #16a34a; }
+        .timeline-item { position: relative; padding-bottom: 1.75rem; padding-left: 2.2rem; }
+        .timeline-item:last-child { padding-bottom: 0; }
+        .timeline-item::before {
+            content: ''; position: absolute; left: 0; top: 0.3rem;
+            width: 1.1rem; height: 1.1rem; background-color: #16a34a;
+            border-radius: 9999px; border: 3px solid #f8f7f4; z-index: 10;
+        }
+        .timeline-item.critical::before { background-color: #dc2626; }
+        .timeline-item::after {
+            content: ''; position: absolute; left: 0.48rem; top: 1.4rem;
+            width: 2px; height: 100%; background-color: #d1d5db;
+        }
+        /* 第三張圖：高低交錯矩陣樣式 */
+        .stagger-col:nth-child(even) { margin-top: 2rem; }
+        @media (max-width: 1024px) { .stagger-col:nth-child(even) { margin-top: 0; } }
+        @keyframes pulse-ring {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5); }
+            50% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+        }
+        .ai-updating { animation: pulse-ring 1.2s ease-in-out; }
+        /* @media print 一鍵匯出簡報專用樣式 */
+        @media print {
+            @page { size: A3 landscape; margin: 10mm; }
+            header, footer, #objective, #architecture, #cpm-roadmap, #benefits, .no-print { display: none !important; }
+            body, #live-dashboard { background: #fff !important; padding: 0 !important; }
+            .stagger-col:nth-child(even) { margin-top: 1.25rem !important; }
+        }
+    </style>
+</head>
+<body class="scroll-smooth">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white/85 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+        <nav class="container mx-auto px-6 py-3 flex justify-between items-center">
+            <h1 class="text-lg md:text-xl font-bold text-gray-800">忠泰建設機構 工程研發部｜工地進度控管-集團儀表板研發計畫</h1>
+            <div class="hidden md:flex space-x-6 text-sm">
+                <a href="#objective" class="nav-link text-gray-600 font-medium pb-1">平台架構</a>
+                <a href="#live-dashboard" class="nav-link text-green-700 font-bold pb-1">★ 安弟AI即時儀表板</a>
+                <a href="#architecture" class="nav-link text-gray-600 font-medium pb-1">選用語言</a>
+                <a href="#cpm-roadmap" class="nav-link text-gray-600 font-medium pb-1">開發藍圖</a>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <!-- 1. 平台設計與核心目標 -->
+        <section id="objective" class="py-16 bg-white border-b border-gray-200">
+            <div class="container mx-auto px-6 text-center max-w-5xl">
+                <p class="text-green-600 font-bold text-sm mb-2">2026 第四季 工程研發提案</p>
+                <h2 class="text-3xl md:text-5xl font-bold text-gray-800 mb-4 leading-tight">
+                    基於營建管理：<span class="text-green-700">AI登打 × 即時更新可視化</span>
+                </h2>
+                <p class="text-gray-600 max-w-3xl mx-auto mb-8">
+                    透過本地端快取資料庫與標準化設定檔 <code>status.json</code>，將「高頻率資料監測」與「週報簡報輸出」自動化，應用現有 Suiqui 系統資訊，創造資訊價值。
+                </p>
+
+                <div class="grid md:grid-cols-3 gap-5 text-left">
+                    <div class="bg-gray-50 p-5 rounded-xl border-l-4 border-green-600 shadow-sm">
+                        <span class="text-xs font-bold text-green-700">LAYER 1｜背景輕量掃描</span>
+                        <h3 class="text-lg font-bold text-gray-800 mt-1">安弟 (地端 AI) 每 5 分鐘檢查</h3>
+                        <p class="text-xs text-gray-600 mt-1 leading-relaxed">監聽suiqui資料夾是否有新進工地照片、設計部進度更新檔，將資訊與平台做差異同步，有異動即更新照片與進度摘要。</p>
+                    </div>
+                    <div class="bg-gray-50 p-5 rounded-xl border-l-4 border-emerald-600 shadow-sm">
+                        <span class="text-xs font-bold text-emerald-700">MIDDLEWARE｜標準化快取</span>
+                        <h3 class="text-lg font-bold text-gray-800 mt-1">覆寫本地端 status.json</h3>
+                        <p class="text-xs text-gray-600 mt-1 leading-relaxed">Day 1 先行定義 Mock Data 結構，鎖定最大字數、動態案件數 (5~7案) 與圖片裁切比例，消除跨部門等待阻斷。</p>
+                    </div>
+                    <div class="bg-gray-50 p-5 rounded-xl border-l-4 border-teal-600 shadow-sm">
+                        <span class="text-xs font-bold text-teal-700">LAYER 2｜前端與週報輸出</span>
+                        <h3 class="text-lg font-bold text-gray-800 mt-1">Web 即時刷新 & 每週 1 次簡報產出</h3>
+                        <p class="text-xs text-gray-600 mt-1 leading-relaxed">前端每 5 分鐘無縫讀取 設定檔 並刷新畫面；每週簡報時透過 <code>@media print</code> 一鍵匯出 A3 高解析 PDF 呈報上級。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. 動態 5~7 案高低交錯儀表板 (安弟每 5 分鐘更新) -->
+        <section id="live-dashboard" class="py-14 bg-[#f2f1ed] border-t border-gray-300">
+            <div class="container mx-auto px-4 xl:px-6 max-w-[1550px]">
+                
+                <!-- 儀表板控制列 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6">
+                    <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 border-b border-gray-200 pb-4">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2.5">
+                                <h3 class="text-2xl font-black text-gray-900">工地進度掌控儀表板（每週簡報 / 即時監控）</h3>
+                                <span class="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-0.5 rounded border border-amber-300">匯出功能開發中</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">
+                                資料來源：本地端快取 <code>status.json</code> ｜ 欄位規範：<code>&lt;案件名&gt; &lt;本日施工項目&gt; &lt;說明&gt; &lt;施工總進度&gt; &lt;明日預定工程&gt;</code>
+                            </p>
+                        </div>
+
+                        <!-- 動態切換 5~7 個案件 + 安弟 AI 5分鐘倒數控制 -->
+                        <div class="flex flex-wrap items-center gap-2.5 bg-green-950 text-white px-4 py-2.5 rounded-lg no-print">
+                            <!-- 動態案件數切換器 -->
+                            <div class="flex items-center gap-1 bg-green-900 px-2 py-1 rounded text-xs">
+                                <span class="text-green-200">動態案件數：</span>
+                                <button data-count="5" class="case-count-btn px-2 py-0.5 rounded font-bold hover:bg-green-700 transition">5案</button>
+                                <button data-count="6" class="case-count-btn px-2 py-0.5 rounded font-bold hover:bg-green-700 transition">6案</button>
+                                <button data-count="7" class="case-count-btn px-2 py-0.5 rounded font-bold bg-green-600 text-white transition">7案</button>
+                            </div>
+
+                            <div class="flex items-center gap-1.5 border-l border-green-800 pl-3">
+                                <span class="h-2.5 w-2.5 rounded-full bg-green-400 animate-ping"></span>
+                                <span class="text-xs font-bold text-green-300">安弟AI (status.json)</span>
+                            </div>
+                            <div class="text-xs border-l border-green-800 pl-3">
+                                <span>下次掃描：</span>
+                                <strong id="countdown-timer" class="font-mono text-amber-300">05:00</strong>
+                            </div>
+                            <button id="manual-sync-btn" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-2.5 py-1.5 rounded transition">
+                                ↻ 模擬安弟寫入JSON
+                            </button>
+                            <button onclick="window.print()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium px-2.5 py-1.5 rounded transition">
+                                🖨️ 匯出週報PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 安弟 AI 巡檢狀態列 -->
+                    <div class="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-green-50 px-3.5 py-2 rounded border border-green-200 text-xs">
+                        <div>
+                            <span class="bg-green-700 text-white font-bold px-1.5 py-0.5 rounded mr-2">安弟 AI 推論摘要</span>
+                            <span id="andy-ai-summary" class="text-gray-800 font-medium">
+                                已讀取本地端 status.json（最後掃描：<span id="last-sync-time" class="font-mono">--:--:--</span>）：目前顯示 7 個動態列管案件，字數與圖片裁切皆符合規範。
+                            </span>
+                        </div>
+                        <span class="text-gray-400 font-mono shrink-0">Suiqui 1週1次簡報 ｜ 安弟每5分鐘巡檢</span>
+                    </div>
+                </div>
+
+                <!-- 5~7 欄高低交錯矩陣容器 -->
+                <div id="dynamic-projects-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 items-start">
+                    <!-- 由 JavaScript 根據 status.json (Mock Data) 動態渲染 5~7 張卡片 -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+        <!-- 2. 技術選用：React 19 + Tailwind CSS + @media print 程式碼範例 -->
+        <section id="architecture" class="py-16">
+            <div class="container mx-auto px-6 max-w-5xl">
+                <div class="mb-8 text-center">
+                    <h3 class="text-2xl md:text-3xl font-bold text-gray-800">技術採用：React 19 + Tailwind CSS + @media print</h3>
+                    <p class="text-sm text-gray-600 mt-1">以 React 19 開發可具備「AI後臺動態調整」優勢。</p>
+                </div>
+
+                <div class="bg-slate-900 text-slate-100 rounded-xl p-6 shadow-lg overflow-x-auto text-xs font-mono leading-relaxed">
+<pre><code><span class="text-emerald-400">// ProjectCard.jsx — React 19 + Tailwind CSS + @media print 排版範例 (未來 Mac 部署架構)</span>
+<span class="text-sky-400">import</span> { use } <span class="text-sky-400">from</span> <span class="text-amber-300">'react'</span>;
+
+<span class="text-sky-400">export function</span> <span class="text-yellow-300">SiteProgressBoard</span>({ statusPromise }) {
+  <span class="text-emerald-400">// 1. React 19 `use` Hook：直接讀取安弟 AI 每 5 分鐘覆寫的 status.json (支援 5~7 個動態案件)</span>
+  <span class="text-sky-400">const</span> projects = <span class="text-yellow-300">use</span>(statusPromise);
+
+  <span class="text-sky-400">return</span> (
+    &lt;<span class="text-pink-400">section</span> className=<span class="text-amber-300">"grid grid-cols-5 lg:grid-cols-7 gap-3 print:w-[297mm] print:gap-2"</span>&gt;
+      {projects.<span class="text-yellow-300">map</span>((item) =&gt; (
+        <span class="text-emerald-400">// 2. 高低交錯排版：even:mt-8 100% 還原 Illustrator/PPT 交錯視覺，列印時自動微調間距</span>
+        &lt;<span class="text-pink-400">article</span> key={item.id} className=<span class="text-amber-300">"even:mt-8 print:even:mt-4 bg-white shadow border print:break-inside-avoid"</span>&gt;
+          
+          <span class="text-emerald-400">{/* &lt;案件名&gt;：鎖定高度與單行截斷 truncate */}</span>
+          &lt;<span class="text-pink-400">header</span> style={{ backgroundColor: item.color }} className=<span class="text-amber-300">"h-16 flex items-center justify-center text-white font-bold truncate px-2"</span>&gt;
+            {item.projectName}
+          &lt;/<span class="text-pink-400">header</span>&gt;
+
+          <span class="text-emerald-400">{/* &lt;本日施工項目&gt; + 現場照片：強制 object-cover 自動裁切比例 */}</span>
+          &lt;<span class="text-pink-400">div</span> className=<span class="text-amber-300">"aspect-[16/10] overflow-hidden"</span>&gt;
+            &lt;<span class="text-pink-400">img</span> src={item.photoUrl} className=<span class="text-amber-300">"w-full h-full object-cover"</span> alt={item.todayWork} /&gt;
+          &lt;/<span class="text-pink-400">div</span>&gt;
+          &lt;<span class="text-pink-400">div</span> className=<span class="text-amber-300">"bg-[#1b3b32] text-white text-center py-1.5 text-xs font-bold truncate px-2"</span>&gt;
+            本日施工：{item.todayWork}
+          &lt;/<span class="text-pink-400">div</span>&gt;
+
+          <span class="text-emerald-400">{/* &lt;說明&gt;：透過 line-clamp-2 嚴格控制最大字數與行數，徹底防呆防跑版 */}</span>
+          &lt;<span class="text-pink-400">p</span> className=<span class="text-amber-300">"p-2.5 text-xs text-gray-600 line-clamp-2 min-h-[3rem] bg-gray-50"</span>&gt;
+            {item.description}
+          &lt;/<span class="text-pink-400">p</span>&gt;
+
+          <span class="text-emerald-400">{/* &lt;施工總進度&gt; &amp; &lt;明日預定工程&gt;：亮色框重點對應副董室列管案 */}</span>
+          &lt;<span class="text-pink-400">footer</span> className={item.isHighlight ? <span class="text-amber-300">"border-2 border-amber-500 border-b-4 border-b-green-700 p-2.5"</span> : <span class="text-amber-300">"border p-2.5"</span>}&gt;
+            &lt;<span class="text-pink-400">div</span> className=<span class="text-amber-300">"text-xs font-bold text-green-800"</span>&gt;總進度：{item.totalProgress}%&lt;/<span class="text-pink-400">div</span>&gt;
+            &lt;<span class="text-pink-400">div</span> className=<span class="text-amber-300">"text-xs text-gray-700 truncate mt-1"</span>&gt;明日預定：{item.tomorrowPlan}&lt;/<span class="text-pink-400">div</span>&gt;
+          &lt;/<span class="text-pink-400">footer</span>&gt;
+        &lt;/<span class="text-pink-400">article</span>&gt;
+      ))}
+    &lt;/<span class="text-pink-400">section</span>&gt;
+  );
+}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 開發藍圖 (已將 Task 2-2 提至 Day 1 消除阻斷風險) -->
+        <section id="cpm-roadmap" class="py-16 bg-white border-t border-b border-gray-200">
+            <div class="container mx-auto px-6 max-w-4xl">
+                <div class="text-center mb-10">
+                    <h3 class="text-2xl md:text-3xl font-bold text-gray-800">本專案之CPM研發路徑分析</h3>
+                    <p class="text-sm text-gray-600 mt-1">過程須確保前/後端開發不受 Suiqui 或設計部資料的轉檔、檔案品質或時間延遲影響。</p>
+                </div>
+                <div id="timeline-container"></div>
+            </div>
+        </section>
+
+        <!-- 4. 量化效益簡表 -->
+        <section id="benefits" class="py-12">
+            <div class="container mx-auto px-6 max-w-4xl">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h4 class="text-lg font-bold text-center mb-4 text-gray-800">導入「集團儀表 + 安弟AI」前後效益比較</h4>
+                    <div class="h-48">
+                        <canvas id="efficiencyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    <footer class="bg-green-950 text-white py-5 text-center text-xs text-gray-400">
+        <p>&copy; 2026 忠泰建設機構 工程研發部 ｜ Windows HTML 試閱版（Ready for React 19 on Mac）</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ==========================================
+            // 1. Project ➔ Phases ➔ Tasks 三層式結構定義
+            // ==========================================
+            const projectData = {
+                projectName: '工地進度掌控儀表板研發計畫',
+                schedule: '10/16 提交研究計畫 ➔ 10/19 啟動開發製作',
+                phases: [
+                    {
+                        phaseId: 'Step 0｜專案啟動',
+                        phaseName: '取得主管授權與資源申請',
+                        isCriticalPhase: true,
+                        tasks: [
+                            {
+                                code: 'Task 0-1',
+                                title: '取得主管授權、資源申請與確定資料來源',
+                                desc: '確立專案範疇、跨部門協調授權，並完成地端 AI 與伺服器環境資源申請。',
+                                critical: true
+                            }
+                        ]
+                    },
+                    {
+                        phaseId: 'Phase 1',
+                        phaseName: '取得各工地／設計部資訊（Suiqui & 內部簡報檔）',
+                        isCriticalPhase: true,
+                        tasks: [
+                            {
+                                code: 'Task 1-1',
+                                title: 'Suiqui 權限開通 & 設計部資訊取得（內部簡報檔）',
+                                desc: '開通 Suiqui 系統存取權限，並同步取得設計部（副董室）每週簡報所需之案件進度資料。',
+                                critical: true
+                            },
+                            {
+                                code: 'Task 1-2',
+                                title: 'Suiqui 自動化擷取驗證',
+                                desc: '驗證能否自動化拉取特定資料（蒐集每週 1 次簡報所需之工地作業紀錄與現場照片）。',
+                                critical: true
+                            },
+                            {
+                                code: 'Task 1-3',
+                                title: 'Raw Data 清理與正規化取得',
+                                desc: '將 Suiqui 與內部簡報檔之原始資料清理轉換，輸出為統一結構。',
+                                critical: true
+                            }
+                        ]
+                    },
+                    {
+                        phaseId: 'Phase 2',
+                        phaseName: '資料分析 ➔ 整理資訊與欄位 ➔ AI 抓取測試',
+                        isCriticalPhase: true,
+                        tasks: [
+                            {
+                                code: 'Task 2-1',
+                                title: '資料分析、清理與分類整理',
+                                desc: '針對各工地回報資料進行分類邏輯開發與異常狀態判定。',
+                                critical: true
+                            },
+                            {
+                                code: 'Task 2-2',
+                                title: '定義排版欄位規格與建立 status.json (Mock Data)',
+                                desc: '鎖定 5 大欄位（案件名、本日施工項目、說明、施工總進度、明日預定工程）、最大字數、動態 5~7 案上限與圖片自動裁切規範。',
+                                critical: true
+                            },
+                            {
+                                code: 'Task 2-5',
+                                title: 'AI 抓取與推論測試',
+                                desc: '測試地端 AI 自動挑選適當現場施工照片，並自動生成符合字數規範之施工描述摘要。',
+                                critical: true
+                            }
+                        ]
+                    },
+                    {
+                        phaseId: 'Phase 3',
+                        phaseName: '排版（UI）：使用的架構選型與套用架構測試',
+                        isCriticalPhase: true,
+                        tasks: [
+                            {
+                                code: 'Task 2-3',
+                                title: '一站式 Web-page 瀏覽與列印研究',
+                                desc: '確定採用 React 19 + Tailwind CSS + @media print，兼顧網頁即時監控與 A3/A4 簡報匯出。',
+                                critical: false
+                            },
+                            {
+                                code: 'Task 2-4',
+                                title: '確定使用的架構（表現法、UI 介面）',
+                                desc: '封裝高低交錯卡片元件，綁定本地端 status.json 資料流。',
+                                critical: true
+                            },
+                            {
+                                code: 'Task 3-1',
+                                title: '套用架構測試與調整排版（對齊 Illustrator / PPT）',
+                                desc: '先以 Illustrator/PPT 確立視覺標準，再套用至前端測試 5~7 個案件動態增減、字數截斷與列印版面。',
+                                critical: true
+                            }
+                        ]
+                    },
+                    {
+                        phaseId: 'Phase 4',
+                        phaseName: '上線測試 ➔ 使用者回饋與自動化串接',
+                        isCriticalPhase: true,
+                        tasks: [
+                            {
+                                code: 'Task 4-1',
+                                title: '串接「安弟（地端 AI）」每 5 分鐘輕量掃描工作流',
+                                desc: '安弟每 5 分鐘監聽資料夾異動，若有新照片或設計部更新檔則重新推論摘要並覆寫 status.json，前端無縫刷新。',
+                                critical: true
+                            },
+                            {
+                                code: 'Task 4-2',
+                                title: '上線測試與使用者回饋修正',
+                                desc: '供工務部與相關決策人員進行實機試閱與列印測試，依據回饋微調版面細節。',
+                                critical: true
+                            }
+                        ]
+                    },
+                    {
+                        phaseId: 'Phase 5',
+                        phaseName: '正式公測、進入 EIP 與後續延伸',
+                        isCriticalPhase: false,
+                        tasks: [
+                            {
+                                code: 'Task 5-1',
+                                title: '正式公測並進入 EIP 系統（需登入）',
+                                desc: '完成內部 SSO / EIP 帳號登入權限整合，正式發布上線。',
+                                critical: true
+                            },
+                            {
+                                code: 'Task 5-2',
+                                title: '視需求延伸其他功能',
+                                desc: '依實際營運需求，評估擴充線上圖面檢視或社群自動化等延伸模組。',
+                                critical: false
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            // ==========================================
+            // 2. 渲染 Project ➔ Phases ➔ Tasks 階層畫面
+            // ==========================================
+            const timelineContainer = document.getElementById('timeline-container');
+            timelineContainer.innerHTML = `
+                <!-- Project 頂層總標題 -->
+                <div class="bg-green-900 text-white p-5 rounded-xl shadow mb-8 flex flex-col sm:flex-row sm:items-center justify-between">
+                    <div>
+                        <span class="text-xs font-bold text-green-300 uppercase tracking-widest">PROJECT LEVEL</span>
+                        <h4 class="text-xl font-black mt-0.5">${projectData.projectName}</h4>
+                    </div>
+                    <span class="mt-2 sm:mt-0 bg-green-800 text-amber-300 text-xs font-bold px-3 py-1.5 rounded border border-green-700">
+                        ${projectData.schedule}
+                    </span>
+                </div>
+            `;
+
+            projectData.phases.forEach(phase => {
+                const phaseBlock = document.createElement('div');
+                phaseBlock.className = 'mb-8 bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm';
+
+                // 渲染 Phase 階層標題
+                let tasksHtml = '';
+                phase.tasks.forEach(task => {
+                    tasksHtml += `
+                        <div class="timeline-item ${task.critical ? 'critical' : ''}">
+                            <div class="bg-white p-4 rounded-lg border ${task.critical ? 'border-red-200' : 'border-gray-200'} shadow-sm">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-xs font-bold px-2 py-0.5 rounded ${task.critical ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}">
+                                        ${task.code} ${task.critical ? '[要徑]' : '[平行]'}
+                                    </span>
+                                    <h6 class="font-bold text-sm md:text-base text-gray-800">${task.title}</h6>
+                                </div>
+                                <p class="text-gray-600 text-xs leading-relaxed">${task.desc}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                phaseBlock.innerHTML = `
+                    <!-- Phase 標題列 -->
+                    <div class="flex items-center gap-2.5 border-b border-gray-200 pb-3 mb-5">
+                        <span class="bg-green-700 text-white text-xs font-bold px-2.5 py-1 rounded">${phase.phaseId}</span>
+                        <h5 class="text-base md:text-lg font-bold text-gray-900">${phase.phaseName}</h5>
+                    </div>
+                    <!-- 縮排顯示該 Phase 底下的 Tasks -->
+                    <div class="pl-2 md:pl-4">
+                        ${tasksHtml}
+                    </div>
+                `;
+                timelineContainer.appendChild(phaseBlock);
+            });
+
+            // ==========================================
+            // 2. Chart.js 精簡效益圖
+            // ==========================================
+            new Chart(document.getElementById('efficiencyChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['週報排版與裁圖穩定度', '跨部門(副董室/工務)資料同步率', '異常狀態即時掌握度'],
+                    datasets: [
+                        { label: '導入前 (人工整理)', data: [35, 50, 20], backgroundColor: 'rgba(156, 163, 175, 0.6)' },
+                        { label: '導入後 (status.json + 安弟AI)', data: [98, 95, 92], backgroundColor: 'rgba(22, 163, 74, 0.8)' }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { x: { beginAtZero: true, max: 100 } }
+                }
+            });
+
+            // ==========================================
+            // 3. 本地端 status.json (Mock Data 結構：支援 5~7 個動態案件)
+            // 欄位：<案件名><本日施工項目><說明><施工總進度><明日預定工程>
+            // ==========================================
+            const statusJsonData = [
+                {
+                    projectName: '忠泰 A 案（大安）',
+                    headerColor: '#689f38',
+                    highlight: true, // 亮色框重點列管
+                    img1: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=500&q=80',
+                    todayWork: 'B2F 頂版鋼筋綁紮',
+                    img2: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=500&q=80',
+                    description: '主筋間距與保護層厚度經結構技師現場查驗合格，水電套管預留無誤。',
+                    totalProgress: 82,
+                    tomorrowPlan: 'B2F 頂版混凝土澆置'
+                },
+                {
+                    projectName: '忠泰 B 案（中山）',
+                    headerColor: '#7cb342',
+                    highlight: false,
+                    img1: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=500&q=80',
+                    todayWork: '12F 單元式帷幕吊裝',
+                    img2: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=500&q=80',
+                    description: '北側立面鋁擠型框架精度複測完成，矽利康填縫耐候測試符合規範。',
+                    totalProgress: 68,
+                    tomorrowPlan: '13F 帷幕預埋件放樣'
+                },
+                {
+                    projectName: '忠泰 C 案（信義）',
+                    headerColor: '#3f9c92',
+                    highlight: true,
+                    img1: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80',
+                    todayWork: '6F ALC 輕質磚隔間',
+                    img2: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=500&q=80',
+                    description: '副董室重點列管：75mm 板材平整度與背襯鐵件固定抽驗全數過關。',
+                    totalProgress: 74,
+                    tomorrowPlan: '7F 輕質磚進料與放樣'
+                },
+                {
+                    projectName: '忠泰 D 案（內湖）',
+                    headerColor: '#e68a2e',
+                    highlight: true,
+                    img1: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=500&q=80',
+                    todayWork: 'B1F 機電主幹管吊掛',
+                    img2: 'https://images.unsplash.com/photo-1581092162384-8987c1d64718?auto=format&fit=crop&w=500&q=80',
+                    description: '依據最新 CSD/SEM 整合圖說施工，消防與排煙風管零碰撞干涉。',
+                    totalProgress: 59,
+                    tomorrowPlan: 'B1F 冰水主機基礎台施作'
+                },
+                {
+                    projectName: '忠泰 E 案（南港）',
+                    headerColor: '#c98f3b',
+                    highlight: false,
+                    img1: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=500&q=80',
+                    todayWork: '1F 公設大廳石材乾掛',
+                    img2: 'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=500&q=80',
+                    description: '設計部確認對紋編號無誤，不鏽鋼乾掛件拉拔試驗達安全標準。',
+                    totalProgress: 91,
+                    tomorrowPlan: '大廳天花板燈溝木作封板'
+                },
+                {
+                    projectName: '忠泰 F 案（士林）',
+                    headerColor: '#5c8491',
+                    highlight: false,
+                    img1: 'https://images.unsplash.com/photo-1503387837-b154d5074bd2?auto=format&fit=crop&w=500&q=80',
+                    todayWork: '連續壁導溝開挖作業',
+                    img2: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=500&q=80',
+                    description: '鄰房傾斜計與沉陷點初值觀測正常，穩定液比重檢測合乎標準。',
+                    totalProgress: 24,
+                    tomorrowPlan: '第一單元連續壁抓掘'
+                },
+                {
+                    projectName: '忠泰 G 案（松山）',
+                    headerColor: '#d16470',
+                    highlight: true,
+                    img1: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=500&q=80',
+                    todayWork: '景觀雨水滯留池防水',
+                    img2: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=500&q=80',
+                    description: '副董室列管綠建築指標：聚脲防水塗膜厚度檢測合格，準備試水。',
+                    totalProgress: 87,
+                    tomorrowPlan: '48 小時滿水試驗啟動'
+                }
+            ];
+
+            let currentCaseCount = 7;
+            const gridContainer = document.getElementById('dynamic-projects-grid');
+
+            // 根據 5 / 6 / 7 案動態調整 Grid 欄數並渲染卡片
+            function renderProjectsBoard(isAiUpdate = false) {
+                gridContainer.className = `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-${currentCaseCount} gap-3.5 items-start`;
+                gridContainer.innerHTML = '';
+
+                const activeCases = statusJsonData.slice(0, currentCaseCount);
+
+                activeCases.forEach((item) => {
+                    const card = document.createElement('div');
+                    card.className = `stagger-col flex flex-col bg-white shadow-sm overflow-hidden transition-all duration-500 ${isAiUpdate ? 'ai-updating' : ''}`;
+
+                    // 亮色框 vs 一般框 (對應第三張圖片底部邊框設計)
+                    const bottomBoxStyle = item.highlight
+                        ? `border: 2px solid ${item.headerColor}; border-bottom: 5px solid #2e7d32;`
+                        : `border: 1px solid #9ca3af;`;
+
+                    card.innerHTML = `
+                        <!-- 1. <案件名> -->
+                        <div style="background-color: ${item.headerColor};" class="h-16 flex flex-col items-center justify-center px-2 text-center text-white shadow-inner">
+                            <span class="text-[10px] opacity-85 tracking-widest uppercase">案件名</span>
+                            <h4 class="font-bold text-base tracking-wide truncate w-full">${item.projectName}</h4>
+                        </div>
+
+                        <!-- 2. <本日施工項目> (搭配現場照片自動裁切) -->
+                        <div class="mt-1">
+                            <div class="h-28 w-full overflow-hidden bg-gray-200 relative">
+                                <img src="${item.img1}" alt="${item.todayWork}" class="w-full h-full object-cover hover:scale-105 transition duration-500">
+                                <span class="absolute top-1.5 left-1.5 bg-black/65 text-white text-[10px] px-1.5 py-0.5 rounded">本日施工項目</span>
+                            </div>
+                            <div class="bg-[#1b3b32] text-white text-center py-2 text-xs font-bold tracking-wider truncate px-2" title="${item.todayWork}">
+                                ${item.todayWork}
+                            </div>
+                        </div>
+
+                        <!-- 3. <說明> (搭配查驗照片 + 雙行字數防呆截斷) -->
+                        <div class="mt-1.5">
+                            <div class="h-24 w-full overflow-hidden bg-gray-200 relative">
+                                <img src="${item.img2}" alt="現場說明" class="w-full h-full object-cover hover:scale-105 transition duration-500">
+                                <span class="absolute top-1.5 left-1.5 bg-black/65 text-white text-[10px] px-1.5 py-0.5 rounded">說明 (安弟AI摘要)</span>
+                            </div>
+                            <div class="bg-[#24473d] text-gray-100 p-2 text-xs leading-snug line-clamp-2 min-h-[3.1rem]" title="${item.description}">
+                                ${item.description}
+                            </div>
+                        </div>
+
+                        <!-- 4. <施工總進度> & 5. <明日預定工程> -->
+                        <div style="${bottomBoxStyle}" class="mt-1.5 bg-white p-3 flex flex-col justify-between min-h-[118px]">
+                            <div>
+                                <div class="flex justify-between items-center text-xs font-bold text-[#1b4d3e] mb-1">
+                                    <span>施工總進度</span>
+                                    <span class="text-sm font-black">${item.totalProgress}%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                                    <div style="width: ${item.totalProgress}%; background-color: ${item.headerColor};" class="h-full transition-all duration-500"></div>
+                                </div>
+                            </div>
+
+                            <div class="mt-2.5 pt-2 border-t border-gray-100 text-left">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase">明日預定工程</p>
+                                <p class="text-xs font-bold text-gray-800 truncate mt-0.5" title="${item.tomorrowPlan}">
+                                    ▸ ${item.tomorrowPlan}
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                    gridContainer.appendChild(card);
+                });
+            }
+
+            // 綁定 5 / 6 / 7 案動態切換按鈕
+            const countBtns = document.querySelectorAll('.case-count-btn');
+            countBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentCaseCount = parseInt(btn.getAttribute('data-count'), 10);
+                    countBtns.forEach(b => b.classList.remove('bg-green-600', 'text-white'));
+                    btn.classList.add('bg-green-600', 'text-white');
+                    renderProjectsBoard(true);
+                    updateSyncTimestamp(`已動態切換為 ${currentCaseCount} 個列管案件排版`);
+                });
+            });
+
+            // ==========================================
+            // 4. 安弟 (地端 AI) 每 5 分鐘掃描 status.json 計時器
+            // ==========================================
+            let remainingSeconds = 300;
+            const timerEl = document.getElementById('countdown-timer');
+            const summaryEl = document.getElementById('andy-ai-summary');
+
+            function updateSyncTimestamp(customMsg) {
+                const now = new Date().toTimeString().split(' ')[0];
+                const msg = customMsg || `目前顯示 ${currentCaseCount} 個動態列管案件，Suiqui 與設計部差異已寫入 status.json`;
+                summaryEl.innerHTML = `已讀取本地端 status.json（最後掃描：<span class="font-mono font-bold">${now}</span>）：${msg}。`;
+            }
+
+            function triggerAndyJsonSync() {
+                // 模擬安弟偵測到資料夾異動，更新進度百分比並重繪
+                statusJsonData.forEach(item => {
+                    if (item.totalProgress < 98) {
+                        item.totalProgress = Math.min(99, item.totalProgress + Math.floor(Math.random() * 2));
+                    }
+                });
+                renderProjectsBoard(true);
+                updateSyncTimestamp('安弟(地端AI)偵測到工地新進照片，已自動更新【說明】與【施工總進度】');
+                remainingSeconds = 300;
+            }
+
+            renderProjectsBoard(false);
+            updateSyncTimestamp();
+
+            setInterval(() => {
+                remainingSeconds--;
+                if (remainingSeconds <= 0) triggerAndyJsonSync();
+                const mins = String(Math.floor(remainingSeconds / 60)).padStart(2, '0');
+                const secs = String(remainingSeconds % 60).padStart(2, '0');
+                timerEl.textContent = `${mins}:${secs}`;
+            }, 1000);
+
+            document.getElementById('manual-sync-btn').addEventListener('click', triggerAndyJsonSync);
+        });
+    </script>
+</body>
+</html>
